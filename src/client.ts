@@ -584,6 +584,25 @@ export class Client {
         this.logger.error(`On consumer_update_query no consumer found`)
         return
       }
+      if (response.active) {
+        // Stream changed to active
+        // TODO: CHECK: Which of the other offset types should do this?
+        if (consumer.offset.type === "first") {
+          const storedOffset = await consumer.queryOffset()
+          if (consumer.localOffset.type === "numeric" && consumer.localOffset.value) {
+            if (consumer.localOffset.value < storedOffset) {
+              consumer.offset = Offset.offset(storedOffset + 1n)
+            } else {
+              consumer.offset = Offset.offset(consumer.localOffset.value + 1n)
+            }
+          } else {
+            consumer.offset = Offset.offset(storedOffset + 1n)
+          }
+        }
+      } else {
+        // Stream changed to inactive
+        // TODO if this consumer processed some messages since the last storeOffset() then call it now with the localOffset
+      }
       this.logger.debug(`on consumer_update_query -> ${consumer.consumerRef}`)
       await connection.send(
         new ConsumerUpdateResponse({ correlationId: response.correlationId, responseCode: 1, offset: consumer.offset })
