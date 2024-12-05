@@ -2,7 +2,7 @@ import { randomUUID } from "crypto"
 import { coerce, lt } from "semver"
 import { inspect } from "util"
 import { Compression, CompressionType, GzipCompression, NoneCompression } from "./compression"
-import { Connection, ConnectionInfo, ConnectionParams, errorMessageOf } from "./connection"
+import { Connection, ConnectionInfo, ConnectionParams, errorMessageOf, ResponseCodeError } from "./connection"
 import { ConnectionPool, ConnectionPurpose } from "./connection_pool"
 import { Consumer, ConsumerFunc, StreamConsumer, computeExtendedConsumerId } from "./consumer"
 import { STREAM_ALREADY_EXISTS_ERROR_CODE } from "./error_codes"
@@ -588,15 +588,22 @@ export class Client {
         // Stream changed to active
         // TODO: CHECK: Which of the other offset types should do this?
         if (consumer.offset.type === "first") {
-          const storedOffset = await consumer.queryOffset()
-          if (consumer.localOffset.type === "numeric" && consumer.localOffset.value) {
-            if (consumer.localOffset.value < storedOffset) {
-              consumer.offset = Offset.offset(storedOffset + 1n)
+          try {
+            const storedOffset = await consumer.queryOffset()
+            if (consumer.localOffset.type === "numeric" && consumer.localOffset.value) {
+              if (consumer.localOffset.value < storedOffset) {
+                consumer.offset = Offset.offset(storedOffset + 1n)
+              } else {
+                consumer.offset = Offset.offset(consumer.localOffset.value + 1n)
+              }
             } else {
-              consumer.offset = Offset.offset(consumer.localOffset.value + 1n)
+              consumer.offset = Offset.offset(storedOffset + 1n)
             }
-          } else {
-            consumer.offset = Offset.offset(storedOffset + 1n)
+          } catch (err) {
+            const isNoOffsetError = err instanceof ResponseCodeError && err.responseCode === ResponseCodeError.NO_OFFSET
+            if (!isNoOffsetError) {
+              throw err
+            }
           }
         }
       } else {

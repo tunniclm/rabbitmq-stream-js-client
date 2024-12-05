@@ -76,6 +76,17 @@ type ListenerEntry = {
   stream: string
 }
 
+export class ResponseCodeError extends Error {
+  static NO_OFFSET: number = 19
+  constructor(
+    message: string,
+    readonly responseCode: number,
+    options?: ErrorOptions
+  ) {
+    super(message, options)
+  }
+}
+
 export class Connection {
   public readonly hostname: string
   public readonly leader: boolean
@@ -523,7 +534,7 @@ export class Connection {
     this.logger.debug(`Query Offset...`)
     const res = await this.sendAndWait<QueryOffsetResponse>(new QueryOffsetRequest(params))
     if (!res.ok) {
-      throw new Error(`Query offset command returned error with code ${res.code}`)
+      throw new ResponseCodeError(`Query offset command returned error with code ${res.code}`, res.code)
     }
     this.logger.debug(`Query Offset response: ${res.ok} with params: '${inspect(params)}'`)
     return res.offsetValue
